@@ -2,8 +2,12 @@
 Version=1.0
 Type=Application
 Name=Cleanux
-GenericName=Limpador de Sistema e Analisador de Disco
-Comment=Limpador nativo e seguro para liberar espaço em disco no Linux
+GenericName=System Cleaner and Disk Analyzer
+GenericName[pt]=Limpador de Sistema e Analisador de Disco
+GenericName[pt_BR]=Limpador de Sistema e Analisador de Disco
+Comment=Native and safe cleaner to free up disk space on Linux
+Comment[pt]=Limpador nativo e seguro para liberar espaço em disco no Linux
+Comment[pt_BR]=Limpador nativo e seguro para liberar espaço em disco no Linux
 Exec=cleanux
 Icon=cleanux
 Terminal=false

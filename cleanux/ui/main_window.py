@@ -1,10 +1,11 @@
 """
-Janela Principal da Aplicação Cleanux com interface Libadwaita / GTK 4.
+Janela Principal da Aplicação Cleanux com interface Libadwaita / GTK 4
+e suporte dinâmico a múltiplos idiomas (Inglês e Português).
 """
 
 import os
 import threading
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -15,6 +16,7 @@ from ..disk_service import DiskService
 from ..cleaner_service import CleanerService, CleanupTarget
 from ..apps_service import AppsService, AppInfo
 from ..utils import format_size
+from ..i18n import i18n, t
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -26,6 +28,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.cleaner_service = CleanerService()
         self.current_targets: List[CleanupTarget] = []
+        self.current_apps: List[AppInfo] = []
+        self.last_disk_summary: Optional[Dict] = None
+
         self.clean_rows: List[Adw.ActionRow] = []
         self.app_rows: List[Adw.ActionRow] = []
         self.target_switches: Dict[str, Gtk.Switch] = {}
@@ -33,6 +38,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.is_busy = False
 
         self._build_ui()
+        i18n.add_listener(self._on_language_changed)
         self.refresh_all_data()
 
     def _build_ui(self):
@@ -49,16 +55,30 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_title = Adw.ViewSwitcherTitle()
         header_bar.set_title_widget(self.view_title)
 
-        # Botão de atualização geral no header
+        # Botão de atualização geral no header (esquerda)
         self.btn_refresh = Gtk.Button()
         self.btn_refresh.set_icon_name("view-refresh-symbolic")
-        self.btn_refresh.set_tooltip_text("Atualizar dados do sistema")
+        self.btn_refresh.set_tooltip_text(t("refresh_tooltip"))
         self.btn_refresh.connect("clicked", lambda _: self.refresh_all_data())
         header_bar.pack_start(self.btn_refresh)
 
-        # Spinner de atividade no header
+        # Spinner de atividade no header (esquerda)
         self.header_spinner = Gtk.Spinner()
         header_bar.pack_start(self.header_spinner)
+
+        # Seletor de idioma no header (direita)
+        lang_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lang_icon = Gtk.Image.new_from_icon_name("preferences-desktop-locale-symbolic")
+        lang_box.append(lang_icon)
+
+        self.lang_dropdown = Gtk.DropDown.new_from_strings(["English", "Português"])
+        self.lang_dropdown.set_valign(Gtk.Align.CENTER)
+        self.lang_dropdown.set_tooltip_text(t("lang_tooltip"))
+        self.lang_dropdown.set_selected(1 if i18n.current_language == "pt" else 0)
+        self.lang_dropdown.connect("notify::selected", self._on_lang_dropdown_changed)
+        lang_box.append(self.lang_dropdown)
+
+        header_bar.pack_end(lang_box)
 
         main_box.append(header_bar)
 
@@ -69,20 +89,20 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Aba 1: Limpeza & Armazenamento
         self.tab_clean = self._create_clean_tab()
-        self.view_stack.add_titled_with_icon(
-            self.tab_clean, "clean", "Limpeza & Disco", "drive-harddisk-symbolic"
+        self.page_clean = self.view_stack.add_titled_with_icon(
+            self.tab_clean, "clean", t("tab_clean"), "drive-harddisk-symbolic"
         )
 
         # Aba 2: Top 10 Aplicativos
         self.tab_apps = self._create_apps_tab()
-        self.view_stack.add_titled_with_icon(
-            self.tab_apps, "apps", "Top 10 Apps", "starred-symbolic"
+        self.page_apps = self.view_stack.add_titled_with_icon(
+            self.tab_apps, "apps", t("tab_apps"), "starred-symbolic"
         )
 
         # Aba 3: Sobre & Segurança
         self.tab_about = self._create_about_tab()
-        self.view_stack.add_titled_with_icon(
-            self.tab_about, "about", "Sobre", "help-about-symbolic"
+        self.page_about = self.view_stack.add_titled_with_icon(
+            self.tab_about, "about", t("tab_about"), "help-about-symbolic"
         )
 
         main_box.append(self.view_stack)
@@ -97,6 +117,61 @@ class MainWindow(Adw.ApplicationWindow):
             0
         )
         main_box.append(switcher_bar)
+
+    def _on_lang_dropdown_changed(self, dropdown: Gtk.DropDown, _pspec):
+        idx = dropdown.get_selected()
+        new_lang = "pt" if idx == 1 else "en"
+        i18n.set_language(new_lang)
+
+    def _on_language_changed(self, _lang_code: str):
+        """Atualiza todos os textos da interface em tempo real quando o idioma muda."""
+        # Header & Abas
+        self.btn_refresh.set_tooltip_text(t("refresh_tooltip"))
+        self.lang_dropdown.set_tooltip_text(t("lang_tooltip"))
+        self.page_clean.set_title(t("tab_clean"))
+        self.page_apps.set_title(t("tab_apps"))
+        self.page_about.set_title(t("tab_about"))
+
+        # Aba 1: Cartão de Disco & Limpeza
+        self.lbl_disk_title.set_text(t("disk_title"))
+        self.lbl_disk_path.set_text(t("disk_subtitle"))
+        self.lbl_metric_used_title.set_text(t("metric_used"))
+        self.lbl_metric_free_title.set_text(t("metric_free"))
+        self.lbl_metric_total_title.set_text(t("metric_total"))
+
+        if self.last_disk_summary:
+            self._update_disk_ui(self.last_disk_summary)
+
+        self.clean_group.set_title(t("clean_group_title"))
+        self.clean_group.set_description(t("clean_group_desc"))
+        self.btn_select_all.set_label(t("btn_select_all"))
+        self.btn_deselect_all.set_label(t("btn_deselect_all"))
+        self.btn_clean_now.set_label(t("btn_clean_selected"))
+
+        if self.current_targets:
+            self._populate_clean_targets(self.current_targets)
+        else:
+            self._update_reclaimable_sum()
+
+        # Aba 2: Top 10 Apps
+        self.lbl_apps_title.set_text(t("apps_title"))
+        self.lbl_apps_desc.set_text(t("apps_desc"))
+        self.btn_rescan_apps.set_tooltip_text(t("apps_rescan_tooltip"))
+
+        if self.current_apps:
+            self._populate_apps_list(self.current_apps)
+
+        # Aba 3: Sobre
+        self.about_status_page.set_description(t("about_desc"))
+        self.about_info_group.set_title(t("about_group_title"))
+        self.about_row1.set_title(t("about_row1_title"))
+        self.about_row1.set_subtitle(t("about_row1_sub"))
+        self.about_row2.set_title(t("about_row2_title"))
+        self.about_row2.set_subtitle(t("about_row2_sub"))
+        self.about_row3.set_title(t("about_row3_title"))
+        self.about_row3.set_subtitle(t("about_row3_sub"))
+        self.about_row4.set_title(t("about_row4_title"))
+        self.about_row4.set_subtitle(t("about_row4_sub"))
 
     # =========================================================================
     # ABA 1: LIMPEZA & ARMAZENAMENTO
@@ -130,12 +205,12 @@ class MainWindow(Adw.ApplicationWindow):
         disk_header.append(disk_icon)
 
         disk_title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        lbl_disk_title = Gtk.Label(label="Armazenamento do Sistema", xalign=0)
-        lbl_disk_title.add_css_class("card-title")
-        lbl_disk_path = Gtk.Label(label="Partição raiz (/)", xalign=0)
-        lbl_disk_path.add_css_class("dim-label")
-        disk_title_box.append(lbl_disk_title)
-        disk_title_box.append(lbl_disk_path)
+        self.lbl_disk_title = Gtk.Label(label=t("disk_title"), xalign=0)
+        self.lbl_disk_title.add_css_class("card-title")
+        self.lbl_disk_path = Gtk.Label(label=t("disk_subtitle"), xalign=0)
+        self.lbl_disk_path.add_css_class("dim-label")
+        disk_title_box.append(self.lbl_disk_title)
+        disk_title_box.append(self.lbl_disk_path)
         disk_header.append(disk_title_box)
 
         spacer = Gtk.Box()
@@ -156,19 +231,23 @@ class MainWindow(Adw.ApplicationWindow):
         metrics_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         metrics_box.set_homogeneous(True)
 
-        self.lbl_metric_used = self._create_metric_widget(metrics_box, "Espaço Usado", "-- GB")
-        self.lbl_metric_free = self._create_metric_widget(metrics_box, "Espaço Livre", "-- GB")
-        self.lbl_metric_total = self._create_metric_widget(metrics_box, "Capacidade Total", "-- GB")
+        self.lbl_metric_used_title, self.lbl_metric_used = self._create_metric_widget(
+            metrics_box, t("metric_used"), "-- GB"
+        )
+        self.lbl_metric_free_title, self.lbl_metric_free = self._create_metric_widget(
+            metrics_box, t("metric_free"), "-- GB"
+        )
+        self.lbl_metric_total_title, self.lbl_metric_total = self._create_metric_widget(
+            metrics_box, t("metric_total"), "-- GB"
+        )
 
         disk_card.append(metrics_box)
         content_box.append(disk_card)
 
         # --- Grupo de Opções de Limpeza ---
         self.clean_group = Adw.PreferencesGroup()
-        self.clean_group.set_title("Opções de Limpeza Segura")
-        self.clean_group.set_description(
-            "Todas as ações abaixo são 100% seguras para o sistema e nunca removem documentos, fotos ou dados pessoais."
-        )
+        self.clean_group.set_title(t("clean_group_title"))
+        self.clean_group.set_description(t("clean_group_desc"))
 
         content_box.append(self.clean_group)
 
@@ -176,24 +255,23 @@ class MainWindow(Adw.ApplicationWindow):
         action_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         action_bar.set_margin_top(6)
 
-        btn_select_all = Gtk.Button(label="Selecionar Todos")
-        btn_select_all.connect("clicked", lambda _: self._set_all_targets(True))
-        action_bar.append(btn_select_all)
+        self.btn_select_all = Gtk.Button(label=t("btn_select_all"))
+        self.btn_select_all.connect("clicked", lambda _: self._set_all_targets(True))
+        action_bar.append(self.btn_select_all)
 
-        btn_deselect_all = Gtk.Button(label="Desmarcar Todos")
-        btn_deselect_all.connect("clicked", lambda _: self._set_all_targets(False))
-        action_bar.append(btn_deselect_all)
+        self.btn_deselect_all = Gtk.Button(label=t("btn_deselect_all"))
+        self.btn_deselect_all.connect("clicked", lambda _: self._set_all_targets(False))
+        action_bar.append(self.btn_deselect_all)
 
         spacer2 = Gtk.Box()
         spacer2.set_hexpand(True)
         action_bar.append(spacer2)
 
-        self.lbl_reclaimable_total = Gtk.Label(label="Espaço a liberar: 0 B")
+        self.lbl_reclaimable_total = Gtk.Label(label=t("reclaimable_label", size="0 B"))
         self.lbl_reclaimable_total.add_css_class("badge-size")
         action_bar.append(self.lbl_reclaimable_total)
 
-        self.btn_clean_now = Gtk.Button(label="Limpar Selecionados")
-        self.btn_clean_now.set_icon_name("user-trash-symbolic")
+        self.btn_clean_now = Gtk.Button(label=t("btn_clean_selected"))
         self.btn_clean_now.add_css_class("suggested-action")
         self.btn_clean_now.add_css_class("clean-button-prominent")
         self.btn_clean_now.connect("clicked", lambda _: self._on_clean_clicked())
@@ -212,7 +290,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         return scrolled
 
-    def _create_metric_widget(self, parent: Gtk.Box, title: str, value: str) -> Gtk.Label:
+    def _create_metric_widget(self, parent: Gtk.Box, title: str, value: str) -> Tuple[Gtk.Label, Gtk.Label]:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         lbl_title = Gtk.Label(label=title, xalign=0)
         lbl_title.add_css_class("disk-metric-title")
@@ -221,7 +299,7 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(lbl_title)
         box.append(lbl_val)
         parent.append(box)
-        return lbl_val
+        return lbl_title, lbl_val
 
     # =========================================================================
     # ABA 2: TOP 10 APLICATIVOS
@@ -246,27 +324,24 @@ class MainWindow(Adw.ApplicationWindow):
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
 
-        lbl_title = Gtk.Label(label="Os 10 Aplicativos Mais Pesados", xalign=0)
-        lbl_title.add_css_class("title-2")
-        lbl_desc = Gtk.Label(
-            label="Aplicativos instalados no sistema que mais consomem espaço de armazenamento.",
-            xalign=0
-        )
-        lbl_desc.add_css_class("dim-label")
+        self.lbl_apps_title = Gtk.Label(label=t("apps_title"), xalign=0)
+        self.lbl_apps_title.add_css_class("title-2")
+        self.lbl_apps_desc = Gtk.Label(label=t("apps_desc"), xalign=0)
+        self.lbl_apps_desc.add_css_class("dim-label")
 
-        title_vbox.append(lbl_title)
-        title_vbox.append(lbl_desc)
+        title_vbox.append(self.lbl_apps_title)
+        title_vbox.append(self.lbl_apps_desc)
         header_box.append(title_vbox)
 
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         header_box.append(spacer)
 
-        btn_rescan_apps = Gtk.Button()
-        btn_rescan_apps.set_icon_name("view-refresh-symbolic")
-        btn_rescan_apps.set_tooltip_text("Recarregar lista de aplicativos")
-        btn_rescan_apps.connect("clicked", lambda _: self._load_apps_data())
-        header_box.append(btn_rescan_apps)
+        self.btn_rescan_apps = Gtk.Button()
+        self.btn_rescan_apps.set_icon_name("view-refresh-symbolic")
+        self.btn_rescan_apps.set_tooltip_text(t("apps_rescan_tooltip"))
+        self.btn_rescan_apps.connect("clicked", lambda _: self._load_apps_data())
+        header_box.append(self.btn_rescan_apps)
 
         content_box.append(header_box)
 
@@ -280,52 +355,49 @@ class MainWindow(Adw.ApplicationWindow):
     # ABA 3: SOBRE & SEGURANÇA
     # =========================================================================
     def _create_about_tab(self) -> Gtk.Widget:
-        status_page = Adw.StatusPage()
-        status_page.set_icon_name("security-high-symbolic")
-        status_page.set_title("Cleanux")
-        status_page.set_description(
-            "Versão 1.0.0 • Limpador e Otimizador Nativo de Sistema para Linux\n\n"
-            "Desenvolvido especialmente para manter seu sistema ágil, liberando espaço com total segurança."
-        )
+        self.about_status_page = Adw.StatusPage()
+        self.about_status_page.set_icon_name("security-high-symbolic")
+        self.about_status_page.set_title("Cleanux")
+        self.about_status_page.set_description(t("about_desc"))
 
         clamp = Adw.Clamp()
         clamp.set_maximum_size(600)
         
-        info_group = Adw.PreferencesGroup()
-        info_group.set_title("Compromisso de Segurança do Cleanux")
+        self.about_info_group = Adw.PreferencesGroup()
+        self.about_info_group.set_title(t("about_group_title"))
 
-        row1 = Adw.ActionRow(
-            title="Preservação de Dados do Usuário",
-            subtitle="O Cleanux nunca remove arquivos em Documentos, Imagens, Vídeos, Downloads ou Área de Trabalho."
+        self.about_row1 = Adw.ActionRow(
+            title=t("about_row1_title"),
+            subtitle=t("about_row1_sub")
         )
-        row1.add_prefix(Gtk.Image.new_from_icon_name("folder-documents-symbolic"))
-        info_group.add(row1)
+        self.about_row1.add_prefix(Gtk.Image.new_from_icon_name("folder-documents-symbolic"))
+        self.about_info_group.add(self.about_row1)
 
-        row2 = Adw.ActionRow(
-            title="Integridade de Logs Essenciais",
-            subtitle="Compacta o histórico do Journal preservando os últimos 3 dias para diagnóstico de falhas."
+        self.about_row2 = Adw.ActionRow(
+            title=t("about_row2_title"),
+            subtitle=t("about_row2_sub")
         )
-        row2.add_prefix(Gtk.Image.new_from_icon_name("text-x-generic-symbolic"))
-        info_group.add(row2)
+        self.about_row2.add_prefix(Gtk.Image.new_from_icon_name("text-x-generic-symbolic"))
+        self.about_info_group.add(self.about_row2)
 
-        row3 = Adw.ActionRow(
-            title="Remoção Segura de Pacotes",
-            subtitle="Elimina apenas pacotes órfãos e arquivos .deb em cache já instalados que podem ser baixados a qualquer momento."
+        self.about_row3 = Adw.ActionRow(
+            title=t("about_row3_title"),
+            subtitle=t("about_row3_sub")
         )
-        row3.add_prefix(Gtk.Image.new_from_icon_name("software-properties-symbolic"))
-        info_group.add(row3)
+        self.about_row3.add_prefix(Gtk.Image.new_from_icon_name("software-properties-symbolic"))
+        self.about_info_group.add(self.about_row3)
 
-        row4 = Adw.ActionRow(
-            title="Tecnologia Nativa Linux",
-            subtitle="Construído com GTK 4 e Libadwaita para máxima integração visual e velocidade no Zorin OS e distribuições GNOME."
+        self.about_row4 = Adw.ActionRow(
+            title=t("about_row4_title"),
+            subtitle=t("about_row4_sub")
         )
-        row4.add_prefix(Gtk.Image.new_from_icon_name("desktop-symbolic"))
-        info_group.add(row4)
+        self.about_row4.add_prefix(Gtk.Image.new_from_icon_name("desktop-symbolic"))
+        self.about_info_group.add(self.about_row4)
 
-        clamp.set_child(info_group)
-        status_page.set_child(clamp)
+        clamp.set_child(self.about_info_group)
+        self.about_status_page.set_child(clamp)
 
-        return status_page
+        return self.about_status_page
 
     # =========================================================================
     # CARREGAMENTO E ATUALIZAÇÃO DE DADOS
@@ -340,13 +412,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.btn_refresh.set_sensitive(False)
 
         def worker():
-            # 1. Disco
             disk_summary = DiskService.get_disk_summary()
-            
-            # 2. Varredura de limpeza
             targets = self.cleaner_service.scan_all()
-
-            # 3. Varredura dos top apps
             apps = AppsService.get_top_heaviest_apps(10)
 
             GLib.idle_add(self._on_data_loaded, disk_summary, targets, apps)
@@ -358,14 +425,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.header_spinner.stop()
         self.btn_refresh.set_sensitive(True)
 
-        # Atualiza Disco
+        self.last_disk_summary = disk_summary
         self._update_disk_ui(disk_summary)
 
-        # Atualiza Alvos de Limpeza
         self.current_targets = targets
         self._populate_clean_targets(targets)
 
-        # Atualiza Top Apps
+        self.current_apps = apps
         self._populate_apps_list(apps)
 
     def _update_disk_ui(self, disk_summary: Dict):
@@ -373,8 +439,7 @@ class MainWindow(Adw.ApplicationWindow):
         percent = root["percent"]
         self.disk_progress.set_fraction(percent / 100.0)
 
-        # Ajusta cor do percentual conforme saturação
-        self.lbl_disk_percent_badge.set_text(root["percent_formatted"] + " em uso")
+        self.lbl_disk_percent_badge.set_text(t("disk_in_use", percent=root["percent_formatted"]))
         if percent > 85.0:
             self.lbl_disk_percent_badge.set_css_classes(["disk-percent-badge", "destructive-action"])
         else:
@@ -417,7 +482,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.target_switches[target.id] = switch
 
             # Badge de segurança
-            badge = Gtk.Label(label="100% Seguro")
+            badge = Gtk.Label(label=t("badge_safe"))
             badge.add_css_class("badge-safe")
             row.add_suffix(badge)
 
@@ -442,7 +507,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _update_reclaimable_sum(self):
         total_selected = sum(t.size_bytes for t in self.current_targets if t.selected)
-        self.lbl_reclaimable_total.set_text(f"Espaço a liberar: {format_size(total_selected)}")
+        self.lbl_reclaimable_total.set_text(t("reclaimable_label", size=format_size(total_selected)))
         self.btn_clean_now.set_sensitive(total_selected > 0 and not self.is_busy)
 
     def _populate_apps_list(self, apps: List[AppInfo]):
@@ -455,7 +520,7 @@ class MainWindow(Adw.ApplicationWindow):
         for app in apps:
             row = Adw.ActionRow()
             row.set_title(app.name)
-            row.set_subtitle(f"Origem: {app.source} • {app.size_formatted}")
+            row.set_subtitle(t("app_row_subtitle", source=app.source, size=app.size_formatted))
 
             # Badge de Ranking (#1, #2, #3, ...)
             lbl_rank = Gtk.Label(label=f"#{app.rank}")
@@ -501,7 +566,6 @@ class MainWindow(Adw.ApplicationWindow):
             except Exception:
                 pass
 
-        # Tenta carregar pelo nome do tema
         img.set_from_icon_name(icon_str)
         return img
 
@@ -524,15 +588,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.is_busy = False
         self.header_spinner.stop()
         self.btn_refresh.set_sensitive(True)
+        self.current_apps = apps
         self._populate_apps_list(apps)
-        toast = Adw.Toast.new("Lista de aplicativos atualizada!")
+        toast = Adw.Toast.new(t("toast_apps_reloaded"))
         self.toast_overlay.add_toast(toast)
 
     # =========================================================================
     # EXECUÇÃO DA LIMPEZA
     # =========================================================================
     def _on_clean_clicked(self):
-        selected_ids = [t.id for t in self.current_targets if t.selected and t.size_bytes > 0]
+        selected_ids = [t_obj.id for t_obj in self.current_targets if t_obj.selected and t_obj.size_bytes > 0]
         if not selected_ids:
             return
 
@@ -540,7 +605,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.btn_clean_now.set_sensitive(False)
         self.status_box.set_visible(True)
         self.status_spinner.start()
-        self.status_label.set_text("Iniciando limpeza segura...")
+        self.status_label.set_text(t("status_starting_clean"))
 
         def update_status(text: str):
             GLib.idle_add(self.status_label.set_text, text)
@@ -557,10 +622,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.status_box.set_visible(False)
         self.btn_clean_now.set_sensitive(True)
 
-        msg_text = f"Limpeza concluída! {format_size(freed_bytes)} liberados com sucesso!"
+        msg_text = t("toast_clean_finished", size=format_size(freed_bytes))
         toast = Adw.Toast.new(msg_text)
         toast.set_timeout(5)
         self.toast_overlay.add_toast(toast)
 
-        # Atualiza os dados de disco e re-varre os alvos
         self.refresh_all_data()

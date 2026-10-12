@@ -19,6 +19,9 @@
   - **User Temporary Caches:** Cleans disposable caches from tools such as `pip`, `npm`, `yarn`, `fontconfig`, and `mesa_shader_cache`.
 - **Top 10 Heaviest Applications:**
   - Ranked list of the 10 largest installed applications on the system (supporting **APT/DEB**, **Flatpak**, and **Snap** packages), featuring native icons, names, source packages, disk space occupied, and relative usage bars.
+- **Internationalization (i18n):**
+  - Supports **English** and **Portuguese**.
+  - Automatically detects the system locale on startup (using English as fallback when the system is configured in an unsupported language) and allows real-time language switching directly from the header bar inside the app.
 
 ---
 
@@ -95,6 +98,7 @@ cleanux/
 │   ├── apps_service.py           # Heaviest applications scanner (APT, Flatpak, Snap)
 │   ├── cleaner_service.py        # Safe cleanup detection and execution engine
 │   ├── disk_service.py           # Disk storage metric service
+│   ├── i18n.py                   # Internationalization (EN/PT) & system locale detection
 │   ├── utils.py                  # Formatting helpers and privilege elevation (pkexec)
 │   └── ui/
 │       ├── __init__.py
