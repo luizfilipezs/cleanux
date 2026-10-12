@@ -1,0 +1,3 @@
+"""
+Interface Gráfica do Cleanux.
+"""

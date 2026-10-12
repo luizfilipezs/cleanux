@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""
+Cleanux - Executável de Inicialização Nativo para Linux.
+"""
+
+import os
+import sys
+
+# Resolve o caminho real do executável caso seja um symlink
+real_path = os.path.realpath(__file__)
+parent_dir = os.path.dirname(real_path)
+grandparent_dir = os.path.dirname(parent_dir)
+
+# 1. Se estiver rodando do repositório local
+if os.path.exists(os.path.join(grandparent_dir, "cleanux", "__init__.py")):
+    if grandparent_dir not in sys.path:
+        sys.path.insert(0, grandparent_dir)
+elif os.path.exists(os.path.join(parent_dir, "cleanux", "__init__.py")):
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+# 2. Se instalado no sistema
+for p in ["/usr/lib/cleanux", "/usr/lib/python3/dist-packages"]:
+    if os.path.exists(p) and p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    from cleanux.app import main
+except ImportError as e:
+    print(f"Erro ao carregar o Cleanux: {e}", file=sys.stderr)
+    print("Certifique-se de que as dependências do GTK 4 estão instaladas:", file=sys.stderr)
+    print("sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1", file=sys.stderr)
+    sys.exit(1)
+
+if __name__ == "__main__":
+    sys.exit(main())

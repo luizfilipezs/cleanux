@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Cleanux
+GenericName=Limpador de Sistema e Analisador de Disco
+Comment=Limpador nativo e seguro para liberar espaço em disco no Linux
+Exec=cleanux
+Icon=cleanux
+Terminal=false
+Categories=System;Utility;Filesystem;
+Keywords=clean;disk;storage;cache;limpeza;disco;otimizador;
+StartupNotify=true
