@@ -4,6 +4,7 @@ e suporte dinâmico a múltiplos idiomas (Inglês e Português).
 """
 
 import os
+import glob
 import threading
 from typing import List, Dict, Optional, Tuple
 
@@ -93,7 +94,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.tab_clean, "clean", t("tab_clean"), "drive-harddisk-symbolic"
         )
 
-        # Aba 2: Top 10 Aplicativos
+        # Aba 2: Todos os Aplicativos
         self.tab_apps = self._create_apps_tab()
         self.page_apps = self.view_stack.add_titled_with_icon(
             self.tab_apps, "apps", t("tab_apps"), "starred-symbolic"
@@ -153,13 +154,15 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._update_reclaimable_sum()
 
-        # Aba 2: Top 10 Apps
-        self.lbl_apps_title.set_text(t("apps_title"))
+        # Aba 2: Aplicativos
         self.lbl_apps_desc.set_text(t("apps_desc"))
+        self.apps_search_entry.set_placeholder_text(t("apps_search_placeholder"))
         self.btn_rescan_apps.set_tooltip_text(t("apps_rescan_tooltip"))
 
         if self.current_apps:
             self._populate_apps_list(self.current_apps)
+        else:
+            self.lbl_apps_title.set_text(t("apps_title"))
 
         # Aba 3: Sobre
         self.about_status_page.set_description(t("about_desc"))
@@ -302,7 +305,7 @@ class MainWindow(Adw.ApplicationWindow):
         return lbl_title, lbl_val
 
     # =========================================================================
-    # ABA 2: TOP 10 APLICATIVOS
+    # ABA 2: TODOS OS APLICATIVOS INSTALADOS
     # =========================================================================
     def _create_apps_tab(self) -> Gtk.Widget:
         scrolled = Gtk.ScrolledWindow()
@@ -313,7 +316,7 @@ class MainWindow(Adw.ApplicationWindow):
         clamp.set_tightening_threshold(640)
         scrolled.set_child(clamp)
 
-        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         content_box.set_margin_top(20)
         content_box.set_margin_bottom(24)
         content_box.set_margin_start(20)
@@ -337,19 +340,45 @@ class MainWindow(Adw.ApplicationWindow):
         spacer.set_hexpand(True)
         header_box.append(spacer)
 
+        self.lbl_apps_total_badge = Gtk.Label(label="")
+        self.lbl_apps_total_badge.add_css_class("badge-size")
+        self.lbl_apps_total_badge.set_valign(Gtk.Align.CENTER)
+        header_box.append(self.lbl_apps_total_badge)
+
         self.btn_rescan_apps = Gtk.Button()
         self.btn_rescan_apps.set_icon_name("view-refresh-symbolic")
+        self.btn_rescan_apps.set_valign(Gtk.Align.CENTER)
         self.btn_rescan_apps.set_tooltip_text(t("apps_rescan_tooltip"))
         self.btn_rescan_apps.connect("clicked", lambda _: self._load_apps_data())
         header_box.append(self.btn_rescan_apps)
 
         content_box.append(header_box)
 
-        # Grupo com a lista de apps
+        # Barra de busca / filtro de aplicativos
+        self.apps_search_entry = Gtk.SearchEntry()
+        self.apps_search_entry.set_placeholder_text(t("apps_search_placeholder"))
+        self.apps_search_entry.set_hexpand(True)
+        self.apps_search_entry.connect("search-changed", self._on_apps_search_changed)
+        content_box.append(self.apps_search_entry)
+
+        # Grupo com a lista completa de apps
         self.apps_group = Adw.PreferencesGroup()
         content_box.append(self.apps_group)
 
         return scrolled
+
+    def _on_apps_search_changed(self, entry: Gtk.SearchEntry):
+        query = entry.get_text().strip().lower()
+        for row, app in zip(self.app_rows, self.current_apps):
+            if not query:
+                row.set_visible(True)
+            else:
+                visible = (
+                    query in app.name.lower()
+                    or query in app.source.lower()
+                    or query in app.pkg_id.lower()
+                )
+                row.set_visible(visible)
 
     # =========================================================================
     # ABA 3: SOBRE & SEGURANÇA
@@ -403,7 +432,7 @@ class MainWindow(Adw.ApplicationWindow):
     # CARREGAMENTO E ATUALIZAÇÃO DE DADOS
     # =========================================================================
     def refresh_all_data(self):
-        """Dispara atualização em segundo plano de disco, alvos e apps."""
+        """Dispara atualização em segundo plano de disco, alvos e todos os apps."""
         if self.is_busy:
             return
 
@@ -414,7 +443,7 @@ class MainWindow(Adw.ApplicationWindow):
         def worker():
             disk_summary = DiskService.get_disk_summary()
             targets = self.cleaner_service.scan_all()
-            apps = AppsService.get_top_heaviest_apps(10)
+            apps = AppsService.get_installed_apps()
 
             GLib.idle_add(self._on_data_loaded, disk_summary, targets, apps)
 
@@ -492,9 +521,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._update_reclaimable_sum()
 
     def _on_switch_toggled(self, target_id: str, is_active: bool):
-        for t in self.current_targets:
-            if t.id == target_id:
-                t.selected = is_active
+        for t_obj in self.current_targets:
+            if t_obj.id == target_id:
+                t_obj.selected = is_active
                 break
         self._update_reclaimable_sum()
 
@@ -506,7 +535,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._update_reclaimable_sum()
 
     def _update_reclaimable_sum(self):
-        total_selected = sum(t.size_bytes for t in self.current_targets if t.selected)
+        total_selected = sum(t_obj.size_bytes for t_obj in self.current_targets if t_obj.selected)
         self.lbl_reclaimable_total.set_text(t("reclaimable_label", size=format_size(total_selected)))
         self.btn_clean_now.set_sensitive(total_selected > 0 and not self.is_busy)
 
@@ -516,7 +545,13 @@ class MainWindow(Adw.ApplicationWindow):
             self.apps_group.remove(row)
         self.app_rows.clear()
 
-        # Adiciona os 10 aplicativos mais pesados
+        total_apps_bytes = sum(a.size_bytes for a in apps)
+        self.lbl_apps_title.set_text(t("apps_title_count", count=len(apps)))
+        self.lbl_apps_total_badge.set_text(
+            t("apps_total_summary", count=len(apps), size=format_size(total_apps_bytes))
+        )
+
+        # Adiciona todos os aplicativos detectados
         for app in apps:
             row = Adw.ActionRow()
             row.set_title(app.name)
@@ -550,8 +585,11 @@ class MainWindow(Adw.ApplicationWindow):
             self.apps_group.add(row)
             self.app_rows.append(row)
 
+        # Aplica filtro atual, se houver texto na barra de busca
+        self._on_apps_search_changed(self.apps_search_entry)
+
     def _resolve_app_icon(self, icon_str: str) -> Gtk.Widget:
-        """Resolve ícone a partir de caminho de arquivo ou nome no tema de ícones."""
+        """Resolve ícone a partir de caminho de arquivo, diretórios extras ou tema de ícones."""
         img = Gtk.Image()
         img.set_pixel_size(36)
 
@@ -559,12 +597,40 @@ class MainWindow(Adw.ApplicationWindow):
             img.set_from_icon_name("application-x-executable")
             return img
 
-        if os.path.isabs(icon_str) and os.path.exists(icon_str):
-            try:
-                img.set_from_file(icon_str)
+        if os.path.isabs(icon_str):
+            if os.path.exists(icon_str):
+                try:
+                    img.set_from_file(icon_str)
+                    return img
+                except Exception:
+                    pass
+            img.set_from_icon_name("application-x-executable")
+            return img
+
+        # Verifica se está presente no tema de ícones do display atual
+        display = Gdk.Display.get_default()
+        if display:
+            icon_theme = Gtk.IconTheme.get_for_display(display)
+            if icon_theme and icon_theme.has_icon(icon_str):
+                img.set_from_icon_name(icon_str)
                 return img
-            except Exception:
-                pass
+
+        # Tenta localizar arquivo de imagem em /usr/share/pixmaps ou exports do Flatpak
+        candidate_files = [
+            f"/usr/share/pixmaps/{icon_str}.png",
+            f"/usr/share/pixmaps/{icon_str}.svg",
+            f"/usr/share/pixmaps/{icon_str}.xpm",
+            f"/var/lib/flatpak/exports/share/icons/hicolor/128x128/apps/{icon_str}.png",
+            f"/var/lib/flatpak/exports/share/icons/hicolor/64x64/apps/{icon_str}.png",
+            f"/var/lib/flatpak/exports/share/icons/hicolor/scalable/apps/{icon_str}.svg",
+        ]
+        for cfile in candidate_files:
+            if os.path.exists(cfile):
+                try:
+                    img.set_from_file(cfile)
+                    return img
+                except Exception:
+                    pass
 
         img.set_from_icon_name(icon_str)
         return img
@@ -579,7 +645,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.btn_refresh.set_sensitive(False)
 
         def worker():
-            apps = AppsService.get_top_heaviest_apps(10)
+            apps = AppsService.get_installed_apps()
             GLib.idle_add(self._on_apps_reloaded, apps)
 
         threading.Thread(target=worker, daemon=True).start()

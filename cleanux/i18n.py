@@ -16,7 +16,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "refresh_tooltip": "Refresh system data",
         "lang_tooltip": "Change application language",
         "tab_clean": "Cleanup & Disk",
-        "tab_apps": "Top 10 Apps",
+        "tab_apps": "Applications",
         "tab_about": "About",
 
         # Tab 1: Disk & Cleanup
@@ -77,9 +77,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "toast_clean_finished": "Cleanup completed! {size} freed successfully!",
         "toast_apps_reloaded": "Application list updated!",
 
-        # Tab 2: Top 10 Apps
-        "apps_title": "Top 10 Heaviest Applications",
-        "apps_desc": "Installed applications on the system that consume the most storage space.",
+        # Tab 2: Applications
+        "apps_title": "Installed Applications",
+        "apps_title_count": "Installed Applications ({count})",
+        "apps_desc": "All applications detected on the system, ranked from heaviest to lightest.",
+        "apps_total_summary": "{count} applications • {size} total",
+        "apps_search_placeholder": "Filter applications by name or source...",
         "apps_rescan_tooltip": "Reload application list",
         "app_row_subtitle": "Source: {source} • {size}",
         "source_system": "System",
@@ -104,7 +107,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "refresh_tooltip": "Atualizar dados do sistema",
         "lang_tooltip": "Alterar idioma do aplicativo",
         "tab_clean": "Limpeza & Disco",
-        "tab_apps": "Top 10 Apps",
+        "tab_apps": "Aplicativos",
         "tab_about": "Sobre",
 
         # Tab 1: Disk & Cleanup
@@ -165,9 +168,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "toast_clean_finished": "Limpeza concluída! {size} liberados com sucesso!",
         "toast_apps_reloaded": "Lista de aplicativos atualizada!",
 
-        # Tab 2: Top 10 Apps
-        "apps_title": "Os 10 Aplicativos Mais Pesados",
-        "apps_desc": "Aplicativos instalados no sistema que mais consomem espaço de armazenamento.",
+        # Tab 2: Applications
+        "apps_title": "Aplicativos Instalados",
+        "apps_title_count": "Aplicativos Instalados ({count})",
+        "apps_desc": "Todos os aplicativos detectados no sistema, ordenados do mais pesado ao mais leve.",
+        "apps_total_summary": "{count} aplicativos • {size} no total",
+        "apps_search_placeholder": "Filtrar aplicativos por nome ou origem...",
         "apps_rescan_tooltip": "Recarregar lista de aplicativos",
         "app_row_subtitle": "Origem: {source} • {size}",
         "source_system": "Sistema",

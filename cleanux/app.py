@@ -2,6 +2,7 @@
 Ponto de entrada da aplicação Cleanux (Adw.Application).
 """
 
+import os
 import sys
 import gi
 gi.require_version("Gtk", "4.0")
@@ -23,11 +24,29 @@ class CleanuxApplication(Adw.Application):
     def do_startup(self):
         Adw.Application.do_startup(self)
         self._load_css()
+        self._setup_icon_theme()
 
     def do_activate(self):
         if not self.window:
             self.window = MainWindow(application=self)
         self.window.present()
+
+    def _setup_icon_theme(self):
+        try:
+            display = Gdk.Display.get_default()
+            if display:
+                icon_theme = Gtk.IconTheme.get_for_display(display)
+                extra_icon_dirs = [
+                    "/var/lib/flatpak/exports/share/icons",
+                    os.path.expanduser("~/.local/share/flatpak/exports/share/icons"),
+                    "/usr/share/pixmaps",
+                    "/var/lib/snapd/desktop/icons",
+                ]
+                for d in extra_icon_dirs:
+                    if os.path.exists(d):
+                        icon_theme.add_search_path(d)
+        except Exception:
+            pass
 
     def _load_css(self):
         try:

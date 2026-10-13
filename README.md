@@ -17,8 +17,8 @@
   - **User Trash:** Empties discarded files in `~/.local/share/Trash`.
   - **Orphaned Flatpak Runtimes:** Removes unused Flatpak runtimes and extensions that have no associated applications.
   - **User Temporary Caches:** Cleans disposable caches from tools such as `pip`, `npm`, `yarn`, `fontconfig`, and `mesa_shader_cache`.
-- **Top 10 Heaviest Applications:**
-  - Ranked list of the 10 largest installed applications on the system (supporting **APT/DEB**, **Flatpak**, and **Snap** packages), featuring native icons, names, source packages, disk space occupied, and relative usage bars.
+- **Installed Applications Analysis:**
+  - Complete ranked list of all installed applications on the system (from heaviest to lightest), supporting **APT/DEB** (with source-group aggregation), **standalone `/opt` & `/usr/local` installs** (e.g., Android Studio, Antigravity IDE, tarballs), **Flatpak**, **Snap**, **AppImage**, **JetBrains Toolbox**, **Steam games**, and **CLI/developer suites** (e.g., Docker, MongoDB Shell/Tools, QEMU, Git), featuring native icons, names, sources, disk space occupied, relative usage bars, and real-time search filtering.
 - **Internationalization (i18n):**
   - Supports **English** and **Portuguese**.
   - Automatically detects the system locale on startup (using English as fallback when the system is configured in an unsupported language) and allows real-time language switching directly from the header bar inside the app.
